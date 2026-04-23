@@ -1,23 +1,35 @@
 import requests
+import re
 from datetime import datetime
-import xml.etree.ElementTree as ET
 
 def get_news():
-    # 使用财联社或类似高价值财经 RSS（这里以一个稳定的财经源为例）
-    rss_url = "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best"
+    # 改用新浪财经的实时新闻接口，更适合国内用户
+    url = "https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2510&k=&num=10&page=1"
     news_list = []
     try:
-        response = requests.get(rss_url, timeout=10)
-        root = ET.fromstring(response.content)
-        for item in root.findall('.//item')[:10]:
+        response = requests.get(url, timeout=15)
+        data = response.json()
+        items = data.get('result', {}).get('data', [])
+        
+        for item in items:
             news_list.append({
-                'title': item.find('title').text,
-                'description': "点击查看深度报道及市场影响分析。",
-                'url': item.find('link').text
+                'title': item.get('title'),
+                'description': item.get('summary') if item.get('summary') else "点击查看财经详情。",
+                'url': item.get('url')
             })
     except Exception as e:
-        # 如果抓取失败，显示一组备用重要讯息
-        news_list = [{'title': '全球市场观察：关注央行最新利率决议', 'description': '市场普遍预期将维持现行政策，重点关注会后声明。', 'url': '#'}]
+        print(f"抓取失败: {e}")
+        # 紧急备用内容
+        news_list = [{
+            'title': '正在获取实时财经数据，请稍后刷新',
+            'description': '如果持续看到此信息，请检查 API 接口连接。',
+            'url': 'https://finance.sina.com.cn/'
+        }]
+    
+    # 如果接口返回空，手动塞入一条提示
+    if not news_list:
+        news_list = [{'title': '今日暂无重大更新', 'description': '请关注稍后的市场开盘动态。', 'url': '#'}]
+        
     return news_list
 
 def generate_html(news_list):
@@ -27,23 +39,25 @@ def generate_html(news_list):
     <html lang="zh-CN">
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>今日 10 条影响力新闻</title>
         <style>
-            body {{ font-family: 'PingFang SC', sans-serif; background: #f0f2f5; padding: 40px 20px; }}
-            .container {{ max-width: 800px; margin: auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
-            h1 {{ color: #1a1a1a; border-left: 5px solid #2c3e50; padding-left: 15px; }}
-            .time {{ color: #888; margin-bottom: 30px; }}
-            .item {{ border-bottom: 1px solid #eee; padding: 20px 0; }}
+            body {{ font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f4f7f9; margin: 0; padding: 20px; }}
+            .container {{ max-width: 700px; margin: 20px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }}
+            h1 {{ color: #2c3e50; font-size: 24px; text-align: center; margin-bottom: 5px; }}
+            .time {{ color: #95a5a6; text-align: center; font-size: 14px; margin-bottom: 30px; border-bottom: 1px solid #eee; padding-bottom: 15px; }}
+            .item {{ padding: 15px 0; border-bottom: 1px dashed #eee; }}
             .item:last-child {{ border: none; }}
-            .item a {{ color: #1a1a1a; text-decoration: none; font-size: 1.2em; font-weight: bold; }}
-            .item a:hover {{ color: #3498db; }}
-            .desc {{ color: #666; margin-top: 10px; font-size: 0.95em; }}
+            .item a {{ color: #2980b9; text-decoration: none; font-size: 18px; font-weight: bold; line-height: 1.4; }}
+            .item a:hover {{ color: #c0392b; text-decoration: underline; }}
+            .desc {{ color: #7f8c8d; margin-top: 8px; font-size: 14px; line-height: 1.6; }}
+            footer {{ text-align: center; margin-top: 20px; color: #bdc3c7; font-size: 12px; }}
         </style>
     </head>
     <body>
         <div class="container">
             <h1>今日 10 条影响力新闻</h1>
-            <p class="time">最后更新时间：{now} (北京时间)</p>
+            <p class="time">更新于：{now} (北京时间)</p>
     """
     for item in news_list:
         html_template += f"""
@@ -52,7 +66,12 @@ def generate_html(news_list):
                 <div class="desc">{item['description']}</div>
             </div>
         """
-    html_template += "</div></body></html>"
+    html_template += """
+            <footer>© 个人投资日报自动化系统</footer>
+        </div>
+    </body>
+    </html>
+    """
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_template)
 
